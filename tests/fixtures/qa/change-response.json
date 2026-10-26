@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "review_id": "REV-FIXTURE-001",
+  "responses": [
+    {
+      "change_request_id": "GCR-FIXTURE-001",
+      "decision": "accepted",
+      "responsible_layer": "layout",
+      "files_or_rules_changed": ["src/render.py"],
+      "preserved": ["title content", "hierarchy"],
+      "new_media_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "regression": {
+        "original_case": "pass",
+        "known_clean_control": "not_available",
+        "negative_examples": ["intentional strike-through: pass"],
+        "unresolved": []
+      }
+    }
+  ],
+  "new_skill_version": "0.4.1"
+}

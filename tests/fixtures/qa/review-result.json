@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "review_id": "REV-FIXTURE-001",
+  "project_id": "contract-fixture",
+  "review_skill": {
+    "version": "0.2.0"
+  },
+  "generation_skill": {
+    "version": "0.4.0"
+  },
+  "media_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "coverage": {
+    "technical": "pass",
+    "content": "pass",
+    "text": "fail",
+    "visual": "pass",
+    "motion": "not_checked",
+    "editorial": "warn",
+    "audio_visual": "skipped",
+    "rights": "pass"
+  },
+  "verdict": "revise",
+  "issues": [
+    {
+      "issue_id": "ISS-FIXTURE-001",
+      "anchor": "TXT-TITLE",
+      "start_sec": 1.0,
+      "end_sec": 2.0,
+      "observed": "A decorative line crosses the title glyphs.",
+      "expected_source": "Title layout contract",
+      "intent_judgment": "accidental-harmful",
+      "verdict": "confirmed",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": []
+    }
+  ],
+  "generation_change_requests": [
+    {
+      "id": "GCR-FIXTURE-001",
+      "issue_ids": ["ISS-FIXTURE-001"],
+      "target_layer": "layout",
+      "relationship": "text-graphic-overlap",
+      "required_observable_change": "Separate the line from title glyphs.",
+      "must_preserve": ["title content", "hierarchy"],
+      "positive_tests": ["original fixture"],
+      "negative_tests": ["intentional strike-through example"],
+      "suggested_scope": "project-specific"
+    }
+  ],
+  "residual_risks": [],
+  "limitations": ["motion and audio checks intentionally not run in fixture"]
+}

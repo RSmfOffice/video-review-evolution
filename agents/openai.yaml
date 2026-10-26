@@ -1,0 +1,7 @@
+interface:
+  display_name: "Video Review Evolution"
+  short_description: "Evidence-first video review and co-evolution"
+  default_prompt: "Use $video-review-evolution to review this video independently, report evidence-backed issues, and turn confirmed problems into validated improvements to the generation workflow."
+
+policy:
+  allow_implicit_invocation: true
