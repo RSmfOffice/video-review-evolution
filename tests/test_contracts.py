@@ -160,6 +160,68 @@ class ReviewContractTests(unittest.TestCase):
             any("requires --response" in item for item in payload["errors"])
         )
 
+    def test_initial_issue_list_cannot_contain_change_requests(self) -> None:
+        result = self.load("review-result.json")
+        result["phase"] = "initial"
+        self.write("review-result.json", result)
+        self.assert_fails("initial issue list cannot contain")
+
+    def test_initial_issue_list_can_stop_before_calibration(self) -> None:
+        result = self.load("review-result.json")
+        result["phase"] = "initial"
+        result["generation_change_requests"] = []
+        self.write("review-result.json", result)
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-X",
+                "utf8",
+                str(VALIDATOR),
+                "--handoff",
+                str(self.qa / "review-handoff.json"),
+                "--result",
+                str(self.qa / "review-result.json"),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(0, completed.returncode, json.dumps(payload, ensure_ascii=False))
+
+    def test_complete_requires_user_calibrated_phase(self) -> None:
+        result = self.load("review-result.json")
+        result["phase"] = "initial"
+        result["generation_change_requests"] = []
+        self.write("review-result.json", result)
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-X",
+                "utf8",
+                str(VALIDATOR),
+                "--handoff",
+                str(self.qa / "review-handoff.json"),
+                "--result",
+                str(self.qa / "review-result.json"),
+                "--require-complete",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(1, completed.returncode)
+        self.assertTrue(
+            any("requires a user-calibrated" in item for item in payload["errors"])
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

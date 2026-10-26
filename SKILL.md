@@ -4,7 +4,7 @@ description: Independently review video outputs, produce evidence-backed finding
 license: MIT
 metadata:
   short-description: Evidence-first video review and co-evolution
-  version: "0.3.0"
+  version: "0.3.1"
 ---
 
 # Video Review Evolution
@@ -21,7 +21,8 @@ Neither Skill may silently approve its own change.
 ## Choose the mode
 
 - `review`: default. Inspect first and return problems only.
-- `calibrate`: verify user corrections and update issue history.
+- `calibrate`: verify user corrections, confirm the issue set, and unlock
+  change requests.
 - `coevolve`: produce or apply a scoped improvement to the generation Skill after
   evidence and regression. Apply Skill edits only with explicit authorization.
 - `regression`: compare a candidate change against known-clean controls, the
@@ -87,6 +88,13 @@ For every finding, include:
 - evidence path/type;
 - whether the issue is subjective, contextual, or a hard requirement.
 
+The first pass is an issue-list phase, not repair authorization. Write
+`review-result.json` with `phase: "initial"` and an empty
+`generation_change_requests` array. Write `qa/review-state.json` with
+`status: "awaiting_user_issue_calibration"`, then stop and ask the user to add,
+remove, or adjust findings. Do not create change requests, repair media, or
+claim that the review is complete during this phase.
+
 An overlap, occlusion, transparency, penetration, cut, black frame, silence, or
 camera crossing is not a defect merely because the relationship occurs. Use the
 reasonableness test in `quality-standard.md`.
@@ -110,6 +118,12 @@ only derived artifacts were inspected.
 6. If user and quality contract conflict, name the conflict and the accountable
    decision owner.
 
+Only after an explicit user response may the reviewer:
+
+1. record the human calibration in `qa/review-state.json`;
+2. set the result phase to `calibrated`;
+3. populate `generation_change_requests`.
+
 For problem-only requests, omit causes and fixes.
 
 ## Co-evolution loop
@@ -124,7 +138,7 @@ qa/review-verification.json  independent verification of the changed bytes
 review memory            scoped rules, corrections, status, supersession
 ```
 
-When a confirmed issue suggests a production-process fix:
+When a human-calibrated issue suggests a production-process fix:
 
 1. classify the relationship primitive without subject names;
 2. state the cheapest responsible generation layer;
@@ -181,6 +195,8 @@ positive, negative, clean-control, and holdout evidence before `validated`.
 ## Finish
 
 Lead with the review verdict. For `review`, present the issue list and evidence.
+If the initial list has not been calibrated, stop with
+`AWAITING USER ISSUE CALIBRATION`; do not continue into coevolution.
 For `calibrate` or `coevolve`, also report:
 
 - what changed in the finding;

@@ -13,7 +13,8 @@
 
 ```text
 qa/review-handoff.json       项目意图、源文件哈希、媒体哈希和稳定锚点
-qa/review-result.json        独立审阅、问题和结构化变更请求
+qa/review-result.json        首轮问题列表或校准后的结构化变更请求
+qa/review-state.json         人工查漏补缺的状态和确认回执
 qa/change-response.json      生成侧变更、回归和版本边界
 qa/review-verification.json  独立审阅对变更后新字节的确认
 review memory                问题与规则的长期作用域、证据和生命周期
@@ -24,7 +25,10 @@ review memory                问题与规则的长期作用域、证据和生命
 ```text
 生成与自检
   -> review-handoff v2
-  -> 独立 review-result v2
+  -> 独立 initial review-result + issue list
+  -> 强制停止：awaiting_user_issue_calibration
+  -> 用户查漏补缺并确认 initial review-result 哈希
+  -> calibrated review-result
   -> generation_change_request
   -> 生成侧 change-response（provisional）
   -> 新独立 review-verification v2
@@ -36,6 +40,9 @@ review memory                问题与规则的长期作用域、证据和生命
 `change-response` 只能证明生成侧完成了修改，不能证明修改有效。只有
 `review-verification.result == validated` 且新媒体哈希匹配时，变更才能被
 称为已验证。
+
+首轮审阅只允许列问题。未被用户校准前，不得生成 change request、修改媒体、
+修复或推进发布门禁。
 
 ## 3. `qa/review-handoff.json`
 
@@ -71,10 +78,10 @@ review memory                问题与规则的长期作用域、证据和生命
   "created_at": "2026-10-26T12:00:00+08:00",
   "generation_skill": {
     "name": "video-production-director",
-    "version": "0.5.0",
+    "version": "0.5.1",
     "sha256": null
   },
-  "review_skill_min_version": "0.3.0",
+  "review_skill_min_version": "0.3.1",
   "review_scope": ["technical", "content", "visual", "motion", "rights"],
   "media": {
     "path": "renders/final.mp4",
@@ -135,6 +142,14 @@ review memory                问题与规则的长期作用域、证据和生命
 - `generation_change_requests`；
 - residual risks 和 limitations。
 
+阶段字段：
+
+- `phase`: `initial` 或 `calibrated`；
+- `user_calibration_required`: 标准与 Hero 必须为 `true`。
+
+`phase == "initial"` 时 `generation_change_requests` 必须为空。用户明确确认
+问题集后，才允许改为 `calibrated` 并生成变更请求。
+
 标准与 Hero 审阅必须独立于生产者。`pass` 不得与已确认的 blocker/major
 共存，也不得包含任何非 `pass` coverage。
 
@@ -164,6 +179,42 @@ review memory                问题与规则的长期作用域、证据和生命
 `unconditional-core` 还必须包含跨路线正例和 holdout。仅含
 `original-failure` 的请求只能保持项目专用。
 
+## 4.1 `qa/review-state.json`
+
+该文件记录“列出问题 → 人工查漏补缺”的硬停止点。
+
+```json
+{
+  "schema_version": 1,
+  "project_id": "example",
+  "review_id": "REV-001",
+  "media_sha256": "64-hex",
+  "initial_review_result_sha256": "64-hex",
+  "status": "awaiting_user_issue_calibration",
+  "issue_list_presented_at": "2026-10-26T12:00:00+08:00",
+  "human_calibration": {
+    "required": true,
+    "status": "pending",
+    "calibrated_by": null,
+    "calibrated_at": null,
+    "user_actions": [],
+    "notes": ""
+  }
+}
+```
+
+状态：
+
+- `not_started`
+- `awaiting_user_issue_calibration`
+- `calibrated`
+- `repair_in_progress`
+- `verification_pending`
+- `complete`
+
+用户确认问题集后，`human_calibration.status` 才能变为 `confirmed`，并记录
+用户、时间和动作。最终发布要求 state 为 `complete`。
+
 ## 5. `qa/change-response.json`
 
 `schema_version` 固定为 `2`。生成侧逐条回应变更请求：
@@ -172,6 +223,10 @@ review memory                问题与规则的长期作用域、证据和生命
   结果和 unresolved；
 - `rejected`：说明合同、权利、成本或证据理由；
 - `deferred`：说明等待条件和责任人。
+
+只有 review result 为 `phase: "calibrated"` 且
+`review-state.human_calibration.status == "confirmed"` 时，才能生成 change
+response。
 
 每个 accepted 请求必须覆盖其 required regression cases。`project revision`
 和 `generation Skill version` 分开记录：

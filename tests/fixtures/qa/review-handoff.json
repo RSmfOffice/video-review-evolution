@@ -4,11 +4,11 @@
   "created_at": "2026-10-26T12:00:00+08:00",
   "generation_skill": {
     "name": "video-production-director",
-    "version": "0.5.0",
+    "version": "0.5.1",
     "path": "video-production-director",
     "sha256": null
   },
-  "review_skill_min_version": "0.3.0",
+  "review_skill_min_version": "0.3.1",
   "review_scope": [
     "technical",
     "content",

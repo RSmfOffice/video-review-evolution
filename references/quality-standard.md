@@ -1,8 +1,8 @@
 # 视频审阅质量标准
 
-版本：`0.3.0`
+版本：`0.3.1`
 
-领域基线：`video-production-director 0.5.0`
+领域基线：`video-production-director 0.5.1`
 
 ## 1. 目标
 

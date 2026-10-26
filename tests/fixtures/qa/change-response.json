@@ -23,8 +23,8 @@
   "new_media_sha256": "e411e1ad5376d60f2954b050801b8ea86c3720c6475b67de848b04f58e910a5b",
   "generation_skill_change": {
     "changed": false,
-    "from_version": "0.5.0",
-    "to_version": "0.5.0"
+    "from_version": "0.5.1",
+    "to_version": "0.5.1"
   },
   "rule_changes": []
 }

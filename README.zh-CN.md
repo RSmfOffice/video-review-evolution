@@ -5,7 +5,7 @@
 一个以证据为先的 Codex Skill，用于独立审阅视频成片、跨版本追踪问题，并验证
 生成侧修复是否真的带来净收益。
 
-当前版本：**0.3.0**
+当前版本：**0.3.1**
 
 本 Skill 是双 Skill 工作流中的独立审阅侧，配套生成 Skill：
 [video-production-director](https://github.com/RSmfOffice/Agent-Skill-for-evidence-gated-AI-video-production.)。
@@ -63,6 +63,7 @@ python -m unittest discover -s tests -v
 
 ## 版本历史
 
+- `v0.3.1`：首轮问题清单后强制停止，必须经过人工查漏补缺才能生成变更请求。
 - `v0.3.0`：schema v2 审阅契约、结构化回归、变更后独立验证、可移植记忆。
 - `v0.2.0`：早期审阅交接架构的历史归档。公开标签不包含本地私有审阅账本。
 

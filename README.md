@@ -6,7 +6,7 @@ An evidence-first Codex Skill for independently reviewing video outputs,
 tracking defects across revisions, and validating whether production fixes are
 genuine net improvements.
 
-Current version: **0.3.0**
+Current version: **0.3.1**
 
 This Skill is the independent review side of a two-Skill workflow. Its companion
 is [video-production-director](https://github.com/RSmfOffice/Agent-Skill-for-evidence-gated-AI-video-production.).
@@ -65,6 +65,8 @@ python -m unittest discover -s tests -v
 
 ## Version history
 
+- `v0.3.1`: enforces a hard stop after the initial issue list and requires
+  explicit human issue calibration before change requests.
 - `v0.3.0`: schema-v2 review contracts, structured regression, independent
   post-change verification, portable memory.
 - `v0.2.0`: historical archive of the original review handoff architecture.

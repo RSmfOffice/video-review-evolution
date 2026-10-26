@@ -150,6 +150,16 @@ evidence:
 > 以上是首轮自审。请指出漏报、误报、表示意图或需要补充的验收条件；
 > 我会逐条复核，并把项目修正与候选通用规则分开记录。
 
+首轮审阅必须写：
+
+- `review-result.phase: "initial"`；
+- `review-result.user_calibration_required: true`；
+- 空的 `generation_change_requests`；
+- `qa/review-state.json` 状态
+  `awaiting_user_issue_calibration`；
+- 当前 `review-result.json` 的 SHA-256；
+- 然后停止，不得修改媒体、生成变更请求或进入回归。
+
 ## 5. 校准
 
 收到用户反馈后：
@@ -165,6 +175,13 @@ evidence:
    - `toolcapability_gap`；
 5. 不改写旧记录；追加新 revision 并通过 `supersedes` 指向被替代记录；
 6. 若纠正改变通用规则，先降为候选并设计正反例。
+
+校准完成后：
+
+1. 在 `qa/review-state.json.human_calibration` 记录确认人、时间和用户动作；
+2. 将 state 状态改为 `calibrated`；
+3. 将 review result 的 phase 改为 `calibrated`；
+4. 此时才允许生成 `generation_change_requests`。
 
 持续记忆默认位于 `$VIDEO_REVIEW_MEMORY_DIR`，未设置时为
 `$CODEX_HOME/video-review-memory`。不要写回可发布 Skill 目录，也不要保存
@@ -185,6 +202,8 @@ evidence:
 - 建议作用域和规则 ID。
 
 默认不直接修改生成 Skill。`coevolve` 模式且用户明确授权时，才可提交修改。
+没有 `human_calibration.status == "confirmed"` 时，任何 change request 或
+change response 都无效。
 
 ## 7. 回归与规则升级
 

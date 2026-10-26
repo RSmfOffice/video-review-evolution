@@ -91,6 +91,7 @@ VERIFICATION_RESULTS = {
     "insufficient_evidence",
     "not_applicable",
 }
+REVIEW_PHASES = {"initial", "calibrated"}
 SOURCE_ROLES = {"brief", "project", "shots", "timeline", "qa_report"}
 
 
@@ -576,6 +577,18 @@ def validate_result(
     )
     if result.get("media_sha256") != context["media_sha256"]:
         errors.append("result: media_sha256 differs from handoff")
+    phase = result.get("phase", "calibrated")
+    if phase not in REVIEW_PHASES:
+        errors.append("result: phase must be initial or calibrated")
+    if not isinstance(result.get("user_calibration_required", True), bool):
+        errors.append("result: user_calibration_required must be a boolean")
+    elif (
+        context["quality_mode"] in {"standard", "hero"}
+        and result.get("user_calibration_required", True) is not True
+    ):
+        errors.append(
+            "result: standard and Hero reviews require user issue calibration"
+        )
 
     coverage = result.get("coverage")
     if not isinstance(coverage, dict) or not coverage:
@@ -677,6 +690,10 @@ def validate_result(
     if not isinstance(requests, list):
         errors.append("result: generation_change_requests must be a list")
         requests = []
+    if phase == "initial" and requests:
+        errors.append(
+            "result: initial issue list cannot contain generation change requests"
+        )
     request_ids: set[str] = set()
     request_by_id: dict[str, dict[str, Any]] = {}
     for index, request in enumerate(requests):
@@ -789,6 +806,7 @@ def validate_result(
         "media_sha256": result.get("media_sha256"),
         "project_id": result.get("project_id"),
         "verdict": verdict,
+        "phase": phase,
     }, errors
 
 
@@ -804,6 +822,10 @@ def validate_response(
         errors.append("response: review_id differs from review result")
     if response.get("media_sha256") != result.get("media_sha256"):
         errors.append("response: media_sha256 differs from reviewed media")
+    if result_context.get("phase") != "calibrated":
+        errors.append(
+            "response: user issue calibration must complete before generation response"
+        )
 
     responses = response.get("responses")
     if not isinstance(responses, list):
@@ -1112,6 +1134,10 @@ def main() -> int:
         if args.require_complete:
             if result is None:
                 errors.append("complete validation requires --result")
+            elif result_context.get("phase") != "calibrated":
+                errors.append(
+                    "complete validation requires a user-calibrated review result"
+                )
             elif result_context.get("request_ids") and response is None:
                 errors.append("complete validation requires --response")
             elif (
