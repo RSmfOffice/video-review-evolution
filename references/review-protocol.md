@@ -31,6 +31,8 @@
 4. 文件改变时，旧 review receipt、规则验证和交付状态全部失效。
 5. 检查审查材料是否来自当前最终文件，而不是 animatic、源码断言、历史
    报告或模型成功响应。
+6. 记录审阅者 ID、审阅者类型、审阅时间和是否独立于生产者。标准与 Hero
+   项目不能用生产者自审满足独立性。
 
 ## 3. 分层检查
 
@@ -164,6 +166,10 @@ evidence:
 5. 不改写旧记录；追加新 revision 并通过 `supersedes` 指向被替代记录；
 6. 若纠正改变通用规则，先降为候选并设计正反例。
 
+持续记忆默认位于 `$VIDEO_REVIEW_MEMORY_DIR`，未设置时为
+`$CODEX_HOME/video-review-memory`。不要写回可发布 Skill 目录，也不要保存
+用户名、盘符、临时目录或复制媒体。
+
 ## 6. 生成侧变更请求
 
 确认问题后，判断最小修复层并生成一条
@@ -189,17 +195,20 @@ evidence:
 3. 至少两个不同内容案例共享同一关系原语；
 4. 至少一个不同生产路线或更高复杂度案例；
 5. 加入合理反例；
-6. 比较缺陷率、严重度、误报率、身份/动作/镜头/文字、时序、可剪辑性、
+6. 加入已知干净对照与 holdout；
+7. 比较缺陷率、严重度、误报率、身份/动作/镜头/文字、时序、可剪辑性、
    创意多样性和成本；
-7. 随机生成路线比较整体通过率和最差输出，不只挑最好输出；
-8. 同类原因连续三次未修复即停止并升级给用户。
+8. 随机生成路线比较整体通过率和最差输出，不只挑最好输出；
+9. 由新的独立审阅轮次检查变更后的新媒体，并写入
+   `qa/review-verification.json`；
+10. 同类原因连续三次未修复即停止并升级给用户。
 
 只有回归通过后才能把规则从 `candidate` 改为 `validated`。
 
 ## 8. 记忆写入
 
 1. 追加 issue revision；
-2. 追加或修订 rule record；
+2. 追加或修订 rule record，并声明 `rule_kind`；
 3. 如有作用域或触发条件变化，更新 `quality-standard.md`；
 4. 运行：
 
@@ -208,6 +217,17 @@ python scripts/validate_memory.py
 ```
 
 5. 报告新增、修订、拒绝或合并的规则，以及它们对下一次审阅的影响。
+
+完整闭环验证：
+
+```bash
+python scripts/validate_contracts.py \
+  --handoff <project>/qa/review-handoff.json \
+  --result <project>/qa/review-result.json \
+  --response <project>/qa/change-response.json \
+  --verification <project>/qa/review-verification.json \
+  --require-complete
+```
 
 ## 9. 提交前自查
 

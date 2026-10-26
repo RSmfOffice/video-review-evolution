@@ -1,21 +1,30 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "review_id": "REV-FIXTURE-001",
+  "media_sha256": "39c437b5cd269850414f5edb49f98d1b79524f5bbbf4b3050a7486263ef7554b",
   "responses": [
     {
       "change_request_id": "GCR-FIXTURE-001",
       "decision": "accepted",
-      "responsible_layer": "layout",
-      "files_or_rules_changed": ["src/render.py"],
+      "responsible_layer": "compositing-timeline",
+      "changed_files_or_rules": ["src/render.py"],
       "preserved": ["title content", "hierarchy"],
-      "new_media_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
-      "regression": {
-        "original_case": "pass",
-        "known_clean_control": "not_available",
-        "negative_examples": ["intentional strike-through: pass"],
-        "unresolved": []
-      }
+      "new_media_sha256": "e411e1ad5376d60f2954b050801b8ea86c3720c6475b67de848b04f58e910a5b",
+      "regression_results": [
+        {"case_id": "REG-ORIGINAL", "result": "pass"},
+        {"case_id": "REG-SAME-MECHANISM", "result": "pass"},
+        {"case_id": "REG-CLEAN", "result": "pass"},
+        {"case_id": "REG-NEGATIVE", "result": "pass"}
+      ],
+      "unresolved": []
     }
   ],
-  "new_skill_version": "0.4.1"
+  "new_project_revision": "fixture-r002",
+  "new_media_sha256": "e411e1ad5376d60f2954b050801b8ea86c3720c6475b67de848b04f58e910a5b",
+  "generation_skill_change": {
+    "changed": false,
+    "from_version": "0.5.0",
+    "to_version": "0.5.0"
+  },
+  "rule_changes": []
 }

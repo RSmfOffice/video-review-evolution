@@ -1,7 +1,8 @@
 # 视频审阅质量标准
 
-版本：`0.2.0`  
-领域基线：`video-production-director 0.4.0`
+版本：`0.3.0`
+
+领域基线：`video-production-director 0.5.0`
 
 ## 1. 目标
 
@@ -235,6 +236,17 @@ observed -> candidate -> project-specific / route-specific / model-specific
 
 复核必须追加新 revision，禁止覆盖历史。
 
+规则还必须声明类型：
+
+- `process-invariant`：哈希、版本、独立审阅等流程硬约束，可直接由程序
+  强制执行，不要求视频回归样本；
+- `quality-heuristic`：遮挡、物理、运动、版式等判断规则，只要超出
+  `project-specific`，就必须通过匹配作用域的正例、反例、干净对照和 holdout
+  才能保持 `active` 或标记 `validated`。
+
+不得用流程规则的标准替代视觉规则验证，也不得用一条流程规则掩盖某个视觉
+启发式尚未回归的事实。
+
 ## 13. 负面优化检查
 
 每条建议都要回答：
@@ -262,3 +274,5 @@ observed -> candidate -> project-specific / route-specific / model-specific
 8. 修复必须有原失败、干净对照和反例回归。
 9. 规则和问题修订保留历史。
 10. 直接、诚实、可证伪，优于“看起来好像有问题”。
+11. 变更响应只是生成侧提案，必须再由独立审阅检查新字节。
+12. 质量启发式和流程不变量使用不同的证据与验证门槛。

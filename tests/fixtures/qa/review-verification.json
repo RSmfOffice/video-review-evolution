@@ -1,0 +1,32 @@
+{
+  "schema_version": 2,
+  "verification_review_id": "REV-FIXTURE-002",
+  "prior_review_id": "REV-FIXTURE-001",
+  "project_id": "contract-fixture",
+  "review_skill": {
+    "name": "video-review-evolution",
+    "version": "0.3.0",
+    "sha256": null
+  },
+  "reviewer": {
+    "id": "verification-reviewer",
+    "kind": "cold-agent",
+    "reviewed_at": "2026-10-26T12:10:00+08:00",
+    "independent_from_producer": true
+  },
+  "change_request_ids": ["GCR-FIXTURE-001"],
+  "original_media_sha256": "39c437b5cd269850414f5edb49f98d1b79524f5bbbf4b3050a7486263ef7554b",
+  "reviewed_media_sha256": "e411e1ad5376d60f2954b050801b8ea86c3720c6475b67de848b04f58e910a5b",
+  "media": {
+    "path": "renders/final-v2.mp4",
+    "sha256": "e411e1ad5376d60f2954b050801b8ea86c3720c6475b67de848b04f58e910a5b"
+  },
+  "regression_results": [
+    {"case_id": "REG-ORIGINAL", "result": "pass"},
+    {"case_id": "REG-SAME-MECHANISM", "result": "pass"},
+    {"case_id": "REG-CLEAN", "result": "pass"},
+    {"case_id": "REG-NEGATIVE", "result": "pass"}
+  ],
+  "result": "validated",
+  "limitations": []
+}

@@ -11,10 +11,11 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from memory_paths import issue_ledger, rule_registry
 
-SKILL_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_ISSUES = SKILL_ROOT / "references" / "issue-ledger.jsonl"
-DEFAULT_RULES = SKILL_ROOT / "references" / "rule-registry.jsonl"
+
+DEFAULT_ISSUES = issue_ledger()
+DEFAULT_RULES = rule_registry()
 
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -44,6 +45,16 @@ ISSUE_STATUSES = {
     "superseded",
 }
 RULE_STATUSES = {"active", "candidate", "validated", "rejected", "merged"}
+RULE_KINDS = {"process-invariant", "quality-heuristic"}
+REGRESSION_ROLES = {
+    "original-failure",
+    "same-mechanism-positive",
+    "cross-route-positive",
+    "high-complexity-positive",
+    "known-clean-control",
+    "negative-example",
+    "holdout",
+}
 REPORTERS = {
     "user",
     "user-correction",
@@ -53,7 +64,7 @@ REPORTERS = {
 }
 
 
-def load_jsonl(path: Path) -> list[dict[str, Any]]:
+def load_jsonl(path: Path, allow_empty: bool = False) -> list[dict[str, Any]]:
     if not path.exists():
         raise ValueError(f"missing file: {path}")
     records: list[dict[str, Any]] = []
@@ -68,7 +79,7 @@ def load_jsonl(path: Path) -> list[dict[str, Any]]:
             raise ValueError(f"{path}:{line_number}: record must be an object")
         value["_line"] = line_number
         records.append(value)
-    if not records:
+    if not records and not allow_empty:
         raise ValueError(f"{path}: no records")
     return records
 
@@ -108,7 +119,21 @@ def validate_common(record: dict[str, Any], errors: list[str]) -> None:
         errors.append(f"line {record['_line']}: revision must be a positive integer")
 
 
-def validate_evidence(value: Any, line: int, errors: list[str]) -> None:
+def is_absolute_locator(value: str) -> bool:
+    normalized = value.replace("\\", "/")
+    return (
+        normalized.startswith("/")
+        or re.match(r"^[A-Za-z]:/", normalized) is not None
+        or normalized.startswith("file:")
+    )
+
+
+def validate_evidence(
+    value: Any,
+    line: int,
+    errors: list[str],
+    require_hash: bool,
+) -> None:
     if not isinstance(value, list):
         errors.append(f"line {line}: evidence must be a list")
         return
@@ -118,17 +143,33 @@ def validate_evidence(value: Any, line: int, errors: list[str]) -> None:
             continue
         if not item.get("path"):
             errors.append(f"line {line}: evidence[{index}] missing path")
+        elif is_absolute_locator(str(item["path"])):
+            errors.append(
+                f"line {line}: evidence[{index}].path must be project-relative"
+            )
         if not item.get("type"):
             errors.append(f"line {line}: evidence[{index}] missing type")
         sha = item.get("sha256")
-        if sha is not None and not SHA256.match(str(sha)):
+        if require_hash and not sha:
+            errors.append(f"line {line}: evidence[{index}] missing sha256")
+        elif sha is not None and not SHA256.match(str(sha)):
             errors.append(f"line {line}: evidence[{index}] has invalid sha256")
+
+
+def semver_tuple(value: Any) -> tuple[int, int, int] | None:
+    if not SEMVER.match(str(value or "")):
+        return None
+    return tuple(int(part) for part in str(value).split("."))
 
 
 def validate_issues(records: list[dict[str, Any]], errors: list[str]) -> None:
     old_ids = {str(r.get("record_id")) for r in records if r.get("record_id")}
+    known_records = {
+        str(r.get("record_id")): r for r in records if r.get("record_id")
+    }
     seen_versions: set[tuple[str, int]] = set()
-    latest_by_issue: dict[str, int] = {}
+    revisions_by_issue: dict[str, set[int]] = {}
+    seen_record_ids: set[str] = set()
 
     for record in records:
         if record.get("record_kind") != "issue":
@@ -136,6 +177,10 @@ def validate_issues(records: list[dict[str, Any]], errors: list[str]) -> None:
             continue
         validate_common(record, errors)
         line = int(record["_line"])
+        record_id = str(record.get("record_id") or "")
+        if record_id in seen_record_ids:
+            errors.append(f"line {line}: duplicate record_id {record_id}")
+        seen_record_ids.add(record_id)
         for key in [
             "review_id",
             "issue_id",
@@ -174,12 +219,16 @@ def validate_issues(records: list[dict[str, Any]], errors: list[str]) -> None:
         if not isinstance(media, dict) or not media.get("path"):
             errors.append(f"line {line}: missing media.path")
         else:
+            if is_absolute_locator(str(media["path"])):
+                errors.append(f"line {line}: media.path must be project-relative")
             sha = media.get("sha256")
             if not sha or not SHA256.match(str(sha)):
                 errors.append(f"line {line}: media.sha256 must be 64 hex characters")
 
         evidence = record.get("evidence")
-        validate_evidence(evidence, line, errors)
+        review_version = semver_tuple(record.get("reviewer_skill_version"))
+        require_hash = review_version is None or review_version >= (0, 3, 0)
+        validate_evidence(evidence, line, errors, require_hash)
         if record.get("verdict") in {"confirmed", "conditionally_confirmed"}:
             if not isinstance(evidence, list) or not evidence:
                 errors.append(f"line {line}: confirmed issue requires evidence")
@@ -195,23 +244,35 @@ def validate_issues(records: list[dict[str, Any]], errors: list[str]) -> None:
             if key in seen_versions:
                 errors.append(f"line {line}: duplicate issue revision {issue_id} r{revision}")
             seen_versions.add(key)
-            latest_by_issue[issue_id] = max(latest_by_issue.get(issue_id, 0), revision)
+            revisions_by_issue.setdefault(issue_id, set()).add(revision)
 
         supersedes = record.get("supersedes")
         if supersedes is not None and supersedes not in old_ids:
             errors.append(f"line {line}: supersedes unknown record {supersedes!r}")
+        elif supersedes is not None:
+            previous = known_records[str(supersedes)]
+            if previous.get("issue_id") != issue_id:
+                errors.append(f"line {line}: supersedes must reference the same issue")
+            if isinstance(revision, int) and previous.get("revision") != revision - 1:
+                errors.append(
+                    f"line {line}: supersedes must reference the previous revision"
+                )
 
-    for issue_id, revision in latest_by_issue.items():
-        if not any(
-            r.get("issue_id") == issue_id and r.get("revision") == revision for r in records
-        ):
-            errors.append(f"missing latest revision for {issue_id}")
+    for issue_id, revisions in revisions_by_issue.items():
+        expected = set(range(1, max(revisions) + 1))
+        if revisions != expected:
+            errors.append(
+                f"{issue_id}: revisions must be contiguous from 1; "
+                f"found {sorted(revisions)}"
+            )
 
 
 def validate_rules(records: list[dict[str, Any]], errors: list[str]) -> set[str]:
     rule_ids: set[str] = set()
     old_ids = {str(r.get("record_id")) for r in records if r.get("record_id")}
     seen_versions: set[tuple[str, int]] = set()
+    revisions_by_rule: dict[str, set[int]] = {}
+    seen_record_ids: set[str] = set()
 
     for record in records:
         if record.get("record_kind") != "rule":
@@ -219,9 +280,14 @@ def validate_rules(records: list[dict[str, Any]], errors: list[str]) -> set[str]
             continue
         validate_common(record, errors)
         line = int(record["_line"])
+        record_id = str(record.get("record_id") or "")
+        if record_id in seen_record_ids:
+            errors.append(f"line {line}: duplicate record_id {record_id}")
+        seen_record_ids.add(record_id)
         for key in [
             "rule_id",
             "version",
+            "rule_kind",
             "statement",
             "trigger",
             "pass_if",
@@ -234,6 +300,8 @@ def validate_rules(records: list[dict[str, Any]], errors: list[str]) -> set[str]
 
         if record.get("status") not in RULE_STATUSES:
             errors.append(f"line {line}: invalid rule status {record.get('status')!r}")
+        if record.get("rule_kind") not in RULE_KINDS:
+            errors.append(f"line {line}: invalid rule_kind {record.get('rule_kind')!r}")
 
         rule_id = record.get("rule_id")
         revision = record.get("revision")
@@ -244,6 +312,7 @@ def validate_rules(records: list[dict[str, Any]], errors: list[str]) -> set[str]
             if key in seen_versions:
                 errors.append(f"line {line}: duplicate rule revision {rule_id} r{revision}")
             seen_versions.add(key)
+            revisions_by_rule.setdefault(rule_id, set()).add(revision)
 
         evidence_ids = record.get("evidence_case_ids")
         if not isinstance(evidence_ids, list):
@@ -251,20 +320,92 @@ def validate_rules(records: list[dict[str, Any]], errors: list[str]) -> set[str]
         regression = record.get("regression_cases")
         if not isinstance(regression, list):
             errors.append(f"line {line}: regression_cases must be a list")
+        else:
+            for index, case in enumerate(regression):
+                if not isinstance(case, dict):
+                    errors.append(
+                        f"line {line}: regression_cases[{index}] must be an object"
+                    )
+                    continue
+                for key in ("case_id", "role", "result"):
+                    require(case, key, errors)
+                if case.get("role") not in REGRESSION_ROLES:
+                    errors.append(
+                        f"line {line}: regression_cases[{index}].role is invalid"
+                    )
+                if case.get("result") not in {
+                    "pass",
+                    "fail",
+                    "not_run",
+                    "not_available",
+                }:
+                    errors.append(
+                        f"line {line}: regression_cases[{index}].result is invalid"
+                    )
 
-        if record.get("scope") == "unconditional-core" and record.get("status") in {
-            "active",
-            "validated",
-        }:
-            if not isinstance(evidence_ids, list) or len(set(evidence_ids)) < 2:
-                errors.append(f"line {line}: unconditional core needs >=2 evidence cases")
+        if (
+            record.get("status") in {"active", "validated"}
+            and record.get("rule_kind") == "quality-heuristic"
+            and record.get("scope") != "project-specific"
+        ):
+            if not isinstance(evidence_ids, list) or not evidence_ids:
+                errors.append(
+                    f"line {line}: non-project quality rule needs evidence cases"
+                )
             if not isinstance(regression, list) or not regression:
-                errors.append(f"line {line}: unconditional core needs regression cases")
+                errors.append(
+                    f"line {line}: non-project quality rule needs regression cases"
+                )
+            if record.get("scope") in {"route-specific", "model-specific"}:
+                roles = {
+                    case.get("role")
+                    for case in regression or []
+                    if isinstance(case, dict)
+                }
+                if "known-clean-control" not in roles:
+                    errors.append(
+                        f"line {line}: route/model quality rule needs a clean control"
+                    )
+            if record.get("scope") in {"conditional-core", "unconditional-core"} and (
+                not isinstance(evidence_ids, list)
+                or len(set(evidence_ids)) < 2
+            ):
+                errors.append(
+                    f"line {line}: validated cross-route rule needs >=2 evidence cases"
+                )
+            if record.get("scope") == "unconditional-core" and isinstance(
+                regression, list
+            ):
+                roles = {
+                    case.get("role")
+                    for case in regression
+                    if isinstance(case, dict)
+                }
+                required_roles = {
+                    "original-failure",
+                    "same-mechanism-positive",
+                    "cross-route-positive",
+                    "known-clean-control",
+                    "negative-example",
+                    "holdout",
+                }
+                if not required_roles.issubset(roles):
+                    errors.append(
+                        f"line {line}: unconditional core is missing regression roles: "
+                        + ", ".join(sorted(required_roles - roles))
+                    )
 
         supersedes = record.get("supersedes")
         if supersedes is not None and supersedes not in old_ids:
             errors.append(f"line {line}: supersedes unknown record {supersedes!r}")
 
+    for rule_id, revisions in revisions_by_rule.items():
+        expected = set(range(1, max(revisions) + 1))
+        if revisions != expected:
+            errors.append(
+                f"{rule_id}: revisions must be contiguous from 1; "
+                f"found {sorted(revisions)}"
+            )
     return rule_ids
 
 
@@ -289,12 +430,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--issues", type=Path, default=DEFAULT_ISSUES)
     parser.add_argument("--rules", type=Path, default=DEFAULT_RULES)
+    parser.add_argument("--memory-root", type=Path)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
+    if args.memory_root:
+        args.issues = issue_ledger(args.memory_root)
+        args.rules = rule_registry(args.memory_root)
 
     errors: list[str] = []
     try:
-        issues = load_jsonl(args.issues)
+        issues = load_jsonl(args.issues, allow_empty=True)
         rules = load_jsonl(args.rules)
         validate_issues(issues, errors)
         rule_ids = validate_rules(rules, errors)

@@ -1,9 +1,10 @@
 ---
 name: video-review-evolution
 description: Independently review video outputs, produce evidence-backed findings, and evolve a persistent quality standard through structured feedback to a generation Skill; use for iterative video QA, defect discovery, regression, and co-evolution across projects.
+license: MIT
 metadata:
   short-description: Evidence-first video review and co-evolution
-  version: "0.2.0"
+  version: "0.3.0"
 ---
 
 # Video Review Evolution
@@ -33,9 +34,15 @@ Do not start a repair or rewrite media in `review` mode.
 1. Read [references/coevolution-contract.md](references/coevolution-contract.md).
 2. Read [references/review-protocol.md](references/review-protocol.md).
 3. Read [references/quality-standard.md](references/quality-standard.md).
-4. Read relevant recent records in
-   `references/issue-ledger.jsonl` and `references/rule-registry.jsonl`.
-5. Validate the memory with:
+4. Locate runtime memory at `$VIDEO_REVIEW_MEMORY_DIR`, or
+   `$CODEX_HOME/video-review-memory` when unset. Initialize it once:
+
+```bash
+python scripts/init_memory.py
+```
+
+5. Read relevant recent records in the runtime issue ledger and rule registry,
+   then validate memory with:
 
 ```bash
 python scripts/validate_memory.py
@@ -113,6 +120,7 @@ The loop has four evidence objects:
 qa/review-handoff.json   generation intent, hashes, anchors, coverage
 qa/review-result.json    findings, intentional-choice checks, change requests
 qa/change-response.json  producer's accepted/rejected changes and regression plan
+qa/review-verification.json  independent verification of the changed bytes
 review memory            scoped rules, corrections, status, supersession
 ```
 
@@ -125,31 +133,37 @@ When a confirmed issue suggests a production-process fix:
 4. do not edit the generation Skill in `review` mode;
 5. after an authorized change, rerun the original case, known-clean controls,
    and negative examples;
-6. only then update the rule status to `validated` or promote its scope.
+6. verify the changed media bytes in `qa/review-verification.json`;
+7. only then update the rule status to `validated` or promote its scope.
 
 Stop after three failed repair rounds on the same cause and escalate. Do not
 use best-of-N generation or silently move the failure to another layer.
 
-When all three loop artifacts exist, validate that they refer to the same review
-and media line:
+When the full loop exists, validate that all artifacts refer to the same review,
+change requests, and media line:
 
 ```bash
 python scripts/validate_contracts.py \
   --handoff <project>/qa/review-handoff.json \
   --result <project>/qa/review-result.json \
-  --response <project>/qa/change-response.json
+  --response <project>/qa/change-response.json \
+  --verification <project>/qa/review-verification.json \
+  --require-complete
 ```
 
 ## Persistent memory
 
-- `references/issue-ledger.jsonl`: append-only issue revisions;
-- `references/rule-registry.jsonl`: rule versions, scope, status, evidence,
-  regression cases, and supersession;
+- `$CODEX_HOME/video-review-memory/issue-ledger.jsonl`: append-only issue
+  revisions;
+- `$CODEX_HOME/video-review-memory/rule-registry.jsonl`: rule versions, scope,
+  status, evidence, regression cases, and supersession;
 - `references/quality-standard.md`: current readable standard;
 - `references/research-basis.md`: sources and the decisions borrowed from them.
 
 Append corrections instead of rewriting history. Never store credentials or
-copied media. Use paths, hashes, short observations, and decisions.
+copied media. Store project-relative paths, hashes, short observations, and
+decisions. Distributed templates and seed rules remain inside the Skill; mutable
+project memory stays outside it.
 
 ## Promotion
 
@@ -161,6 +175,8 @@ copied media. Use paths, hashes, short observations, and decisions.
   cross-route evidence shows no material false-block or quality regression.
 
 No rule gains universal status because it sounds general.
+Process invariants are enforced structurally. Quality heuristics require scoped
+positive, negative, clean-control, and holdout evidence before `validated`.
 
 ## Finish
 

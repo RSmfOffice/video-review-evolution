@@ -1,59 +1,81 @@
-# 生成 Skill 与审阅 Skill 协同契约
+# 生成与审阅协同契约 v2
 
 ## 1. 角色
 
-- `video-production-director`：生成 Skill，拥有 brief、镜头、资产、生成、
-  合成、修复、生产证据和生成侧回归。
-- `video-review-evolution`：审阅 Skill，拥有独立观察、问题判定、稳定锚点、
-  变更请求、审阅记忆和审阅侧回归。
+- `video-production-director`：负责 brief、镜头、资产、生成、合成、修复、
+  生产证据和生成侧回归。
+- `video-review-evolution`：负责独立观察、问题判定、稳定锚点、变更请求、
+  审阅记忆和新媒体验证。
 - 用户/责任方：决定项目意图、审美接受、预算、权利和最终发布。
 
-生成 Skill 不能自证通过；审阅 Skill 不能凭一句意见直接改写生产规则。
-
-## 2. 闭环
+生成 Skill 不能自证通过；审阅 Skill 不能直接修改媒体。两者通过以下五个
+证据对象协作。
 
 ```text
-生成预检与合同
-  -> 最终媒体 + review-handoff
-  -> 审阅首轮问题
-  -> 用户校准
-  -> generation_change_request
-  -> 生成侧最小修复
-  -> change-response + 新媒体
-  -> 原失败 / 干净对照 / 反例回归
-  -> issue 与 rule 状态更新
-  -> 下一轮生成读取已验证规则
+qa/review-handoff.json       项目意图、源文件哈希、媒体哈希和稳定锚点
+qa/review-result.json        独立审阅、问题和结构化变更请求
+qa/change-response.json      生成侧变更、回归和版本边界
+qa/review-verification.json  独立审阅对变更后新字节的确认
+review memory                问题与规则的长期作用域、证据和生命周期
 ```
 
-一轮最多三次同类修复。第三次仍失败时停止自动循环，升级为路线、资产、
-模型或创意方向决策。
+## 2. 完整闭环
+
+```text
+生成与自检
+  -> review-handoff v2
+  -> 独立 review-result v2
+  -> generation_change_request
+  -> 生成侧 change-response（provisional）
+  -> 新独立 review-verification v2
+  -> 原失败、同机制正例、干净对照、反例和 holdout
+  -> rule candidate / validated / rejected
+  -> 生成侧最终门禁
+```
+
+`change-response` 只能证明生成侧完成了修改，不能证明修改有效。只有
+`review-verification.result == validated` 且新媒体哈希匹配时，变更才能被
+称为已验证。
 
 ## 3. `qa/review-handoff.json`
 
-生成侧在进入 review 前生成，绑定当前最终文件和生成上下文。
+`schema_version` 固定为 `2`。生成侧在选定最终候选后创建。
+
+必需内容：
+
+- `project_id`、ISO 格式 `created_at`；
+- 生成 Skill 名称、版本和可选 bundle SHA-256；
+- 最低审阅 Skill 版本；
+- 本轮实际审阅的 `review_scope`；
+- 最终媒体的相对路径、SHA-256、时长、画幅、FPS 和音频状态；
+- 平台、预期观看尺寸和 quality mode；
+- brief、project、shots、timeline、qa-report 的路径与哈希；
+- 必需观察、关联的 acceptance IDs；
+- 稳定 shot/graphic/event anchors；
+- 有意选择、允许效果和必须保留项；
+- route、model、prompt/source 和参考来源；
+- 已知干净对照、已知失败对照和 excluded checks。
+
+`project.json` 会随 gate 审批变化。其源哈希使用
+`hash_mode: "json-without-gates"`，即去掉可变 `gates` 字段后按稳定 JSON
+序列化再计算 SHA-256。
+
+所有路径必须相对项目根目录。媒体、源文件和控制样片的哈希必须可重新计算。
+
+示例：
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "project_id": "example",
   "created_at": "2026-10-26T12:00:00+08:00",
   "generation_skill": {
     "name": "video-production-director",
-    "version": "0.4.0",
-    "path": "C:/.../video-production-director",
-    "sha256": "optional skill bundle hash"
+    "version": "0.5.0",
+    "sha256": null
   },
-  "review_skill_min_version": "0.2.0",
-  "review_scope": [
-    "technical",
-    "content",
-    "text",
-    "visual",
-    "motion",
-    "editorial",
-    "audio_visual",
-    "rights"
-  ],
+  "review_skill_min_version": "0.3.0",
+  "review_scope": ["technical", "content", "visual", "motion", "rights"],
   "media": {
     "path": "renders/final.mp4",
     "sha256": "64-hex",
@@ -69,46 +91,22 @@
     "quality_mode": "standard"
   },
   "sources": {
-    "brief": "brief.md",
-    "project": "project.json",
-    "shots": "shots.json",
-    "timeline": "timeline.json",
-    "qa_report": "qa-report.json"
-  },
-  "required_observations": [
-    {
-      "id": "REQ-MAIN",
-      "observable": "The required subject remains identifiable.",
-      "acceptance_ids": ["A1"]
-    }
-  ],
-  "intentional_choices": [
-    {
-      "id": "INT-01",
-      "relationship": "text-graphic-overlap",
-      "declared": "The accent line intentionally crosses the title as a designed strike-through.",
-      "allowed_effects": ["partial glyph occlusion"],
-      "must_preserve": ["exact text", "readable recognition"],
-      "evidence": "creative-bible.md#title-treatment"
-    }
-  ],
-  "anchors": [
-    {
-      "id": "SHOT-S01",
-      "kind": "shot",
-      "start_sec": 0.0,
-      "end_sec": 10.0
+    "brief": {"path": "brief.md", "sha256": "64-hex"},
+    "project": {
+      "path": "project.json",
+      "sha256": "64-hex",
+      "hash_mode": "json-without-gates"
     },
-    {
-      "id": "TXT-TITLE",
-      "kind": "graphic",
-      "start_sec": 0.35,
-      "end_sec": 9.7
-    }
-  ],
+    "shots": {"path": "shots.json", "sha256": "64-hex"},
+    "timeline": {"path": "timeline.json", "sha256": "64-hex"},
+    "qa_report": {"path": "qa-report.json", "sha256": "64-hex"}
+  },
+  "required_observations": [],
+  "intentional_choices": [],
+  "anchors": [],
   "control_context": {
     "route": "programmatic",
-    "model": "local/pillow-ffmpeg",
+    "model": "local/renderer",
     "prompt_or_source": "src/render.py",
     "references": []
   },
@@ -119,169 +117,152 @@
 }
 ```
 
-### 约束
-
-- `media.sha256` 必须是最终文件哈希，不是 animatic 或预览。
-- `intentional_choices` 必须写清允许效果和必须保留项。没有声明时，审阅者
-  可以提出疑问，但不能把审美偏好自动写成缺陷。
-- `anchors` 使用稳定 ID；时间码可在重新剪辑后变化，但 ID 应保持。
-- `excluded_checks` 只表示用户明确不要求或环境不支持，不表示通过。
-
 ## 4. `qa/review-result.json`
 
-审阅 Skill 生成，绑定同一媒体和两个 Skill 版本。
+`schema_version` 固定为 `2`。由独立审阅侧生成，必须绑定同一 handoff 和
+媒体。
 
-```json
-{
-  "schema_version": 1,
-  "review_id": "REV-...",
-  "project_id": "example",
-  "review_skill": {
-    "version": "0.2.0"
-  },
-  "generation_skill": {
-    "version": "0.4.0"
-  },
-  "media_sha256": "64-hex",
-  "coverage": {
-    "technical": "pass",
-    "content": "pass",
-    "text": "fail",
-    "visual": "pass",
-    "motion": "not_checked",
-    "editorial": "warn",
-    "audio_visual": "skipped",
-    "rights": "pass"
-  },
-  "verdict": "revise",
-  "issues": [
-    {
-      "issue_id": "ISS-...",
-      "anchor": "TXT-TITLE",
-      "start_sec": 1.4,
-      "end_sec": 9.3,
-      "observed": "A thin accent line crosses the lower glyph strokes.",
-      "expected_source": "Title legibility and no accidental graphic collision.",
-      "intent_judgment": "accidental-harmful",
-      "verdict": "confirmed",
-      "severity": "major",
-      "confidence": "high",
-      "evidence": []
-    }
-  ],
-  "generation_change_requests": [
-    {
-      "id": "GCR-001",
-      "issue_ids": ["ISS-..."],
-      "target_layer": "layout",
-      "relationship": "text-graphic-overlap",
-      "required_observable_change": "Separate the accent line from all title glyph bounds.",
-      "must_preserve": ["title content", "overall hierarchy"],
-      "positive_tests": ["original case"],
-      "negative_tests": ["intentional strike-through reference"],
-      "suggested_scope": "project-specific"
-    }
-  ],
-  "residual_risks": [],
-  "limitations": []
-}
-```
+必需内容：
 
-### 约束
+- `review_id`、`project_id`、审阅 Skill 名称与版本；
+- `reviewer.id`、`reviewer.kind`、`reviewed_at` 和
+  `independent_from_producer`；
+- 被审媒体的 `media_sha256`；
+- 每个 `review_scope` 的 coverage 状态；
+- 非 `pass` 覆盖的 `coverage_reasons`；
+- issue 的锚点、时间范围、观察、期望、意图判断、verdict、严重度和置信度；
+- 确认问题对应的相对路径证据及 SHA-256；
+- `generation_change_requests`；
+- residual risks 和 limitations。
 
-- 覆盖状态只使用 `pass`、`warn`、`fail`、`not_checked`、`skipped`。
-- 未检查的覆盖不能参与 `pass`。
-- `not_checked` 和 `skipped` 必须说明原因。
-- 审阅者发现的问题与建议修复分开；不得把未经验证的建议写成现有结论。
-- 由低分辨率代理产生的问题不得标为 high confidence，除非原生证据确认。
+标准与 Hero 审阅必须独立于生产者。`pass` 不得与已确认的 blocker/major
+共存，也不得包含任何非 `pass` coverage。
+
+### 变更请求
+
+每条 `generation_change_request` 必须包含：
+
+- 关联的确认 issue；
+- `target_layer` 和关系原语；
+- 可观察的期望变化；
+- `must_preserve`；
+- 结构化 `regression_cases`；
+- 负作用、豁免条件和净收益指标；
+- 建议作用域。
+
+回归案例角色：
+
+- `original-failure`
+- `same-mechanism-positive`
+- `cross-route-positive`
+- `high-complexity-positive`
+- `known-clean-control`
+- `negative-example`
+- `holdout`
+
+`conditional-core` 至少需要同机制正例、干净对照和反例；
+`unconditional-core` 还必须包含跨路线正例和 holdout。仅含
+`original-failure` 的请求只能保持项目专用。
 
 ## 5. `qa/change-response.json`
 
-生成 Skill 在收到变更请求后生成：
+`schema_version` 固定为 `2`。生成侧逐条回应变更请求：
 
-```json
-{
-  "schema_version": 1,
-  "review_id": "REV-...",
-  "responses": [
-    {
-      "change_request_id": "GCR-001",
-      "decision": "accepted",
-      "responsible_layer": "layout",
-      "files_or_rules_changed": ["src/..."],
-      "preserved": ["title content"],
-      "new_media_sha256": "64-hex",
-      "regression": {
-        "original_case": "pass",
-        "known_clean_control": "pass",
-        "negative_examples": ["intentional strike-through: pass"],
-        "unresolved": []
-      }
-    }
-  ],
-  "new_skill_version": "0.4.1"
-}
+- `accepted`：提供责任层、变更文件/规则、保留项、新媒体 SHA-256、回归
+  结果和 unresolved；
+- `rejected`：说明合同、权利、成本或证据理由；
+- `deferred`：说明等待条件和责任人。
+
+每个 accepted 请求必须覆盖其 required regression cases。`project revision`
+和 `generation Skill version` 分开记录：
+
+- 只改当前项目媒体时，Generation Skill 版本不变；
+- 只有生成 Skill 的规则或实现变化时，才允许更新 Skill 版本；
+- 新版 Skill 版本必须高于旧版。
+
+## 6. `qa/review-verification.json`
+
+`schema_version` 固定为 `2`。由新的独立审阅轮次生成。
+
+必需内容：
+
+- `verification_review_id`、`prior_review_id` 和 `project_id`；
+- 审阅 Skill 与独立 reviewer；
+- accepted `change_request_ids`；
+- 原始媒体哈希和变更后媒体哈希；
+- 新媒体的相对路径与哈希；
+- 每个 required regression case 的结果；
+- 最终状态：`validated`、`rejected`、`provisional`、
+  `insufficient_evidence` 或 `not_applicable`。
+
+没有 accepted change 时使用 `not_applicable`。存在 accepted change 时，
+所有 required regression results 必须为 `pass`，并且审阅者独立于生产者。
+
+## 7. 规则与记忆
+
+持久记忆不放在可发布 Skill 内。默认目录：
+
+```text
+$VIDEO_REVIEW_MEMORY_DIR
+  或
+$CODEX_HOME/video-review-memory/
+    issue-ledger.jsonl
+    rule-registry.jsonl
 ```
 
-拒绝请求时需要写 `decision: "rejected"` 和基于合同、权利、成本或证据的理由。
+首次安装：
 
-## 6. 规则与生成 Skill 的双向更新
+```bash
+python scripts/init_memory.py
+```
 
-审阅侧可以提出：
+记忆只保存 `project_id`、项目内相对路径、哈希、短观察和决策。不得保存
+用户名、盘符、临时绝对路径、凭据或复制媒体。
 
-- 生成合同缺失；
-- 分镜/动作设计风险；
-- 控制路线或模型适配问题；
-- 资产、关键帧、深度/遮罩/合成问题；
-- QA 方法和证据要求；
-- 提示词结构问题。
+规则分为：
 
-生成侧必须：
+- `process-invariant`：流程硬约束，可直接强制执行；
+- `quality-heuristic`：视觉、物理或版式判断，必须回归后验证。
 
-1. 找到最便宜、最靠上游的责任层；
-2. 一次只改一个因果变量；
-3. 保留已批准的主体、动作和风格；
-4. 更新 `new_media_sha256`；
-5. 提供回归结果和残余风险。
+超出项目范围的 `quality-heuristic` 无论标为 `active` 还是 `validated`，都必须
+有证据案例和结构化回归。`conditional-core`
+至少需要两个证据案例；`unconditional-core` 还必须具备跨路线、负例、干净
+对照和 holdout。
 
-审阅侧必须：
+## 8. 验证
 
-1. 先复审原失败；
-2. 再检查干净对照和反例；
-3. 重新比较全部指标；
-4. 通过后再把规则标记为 `validated`；
-5. 未通过时保持 `candidate` 或标记 `rejected`。
+首轮 handoff：
 
-## 7. 有意选择与误报
+```bash
+python scripts/validate_contracts.py \
+  --handoff <project>/qa/review-handoff.json
+```
 
-审阅者必须读取 `intentional_choices`，但不能盲信：
+完整闭环：
 
-- 设计声明与最终画面明显冲突时，记录冲突；
-- 声明可以解释重叠、黑场、静音、超现实物理和非写实风格；
-- 声明不能保护错误文字、误导性事实、版权、安全或平台硬性要求；
-- 未声明不等于禁止，尤其是没有合同的新类型探索；
-- 对意图不明确的效果使用 `intentional-ambiguous`，不直接判错。
+```bash
+python scripts/validate_contracts.py \
+  --handoff <project>/qa/review-handoff.json \
+  --result <project>/qa/review-result.json \
+  --response <project>/qa/change-response.json \
+  --verification <project>/qa/review-verification.json \
+  --require-complete
+```
 
-## 8. 已知干净对照
+记忆：
 
-每个成熟规则至少有一个已知干净样片作为 false-positive canary：
+```bash
+python scripts/validate_memory.py
+```
 
-- 轨道周期运动不应触发滚动接触规则；
-- 有意多层辉光不应触发透明接缝规则；
-- 无文字视频不触发文字版式规则；
-- 无接触对象不触发支撑规则；
-- 设计性黑场和静音不触发技术阻断。
+## 9. 停止条件
 
-干净样片必须有自己的哈希和当前 Skill 版本。
-
-## 9. 工作停止条件
-
-- 媒体或 handoff 哈希不一致；
-- 必需输出无法访问；
-- 原失败、对照或反例回归不完整；
-- 同一原因修复三次仍失败；
-- 评分提高依赖 best-of-N、挑选有利帧或隐藏失败输出；
-- 用户偏好与硬要求冲突且无责任人决定；
-- 规则升级会误伤明确合法的艺术风格。
-
-遇到停止条件时保持 provisional，不要宣称已验证。
+- handoff、媒体、源文件或证据哈希不一致；
+- 审阅 Skill 版本低于 handoff 最低版本；
+- reviewer 不独立或身份缺失；
+- 已确认问题没有证据；
+- accepted change 没有新媒体字节；
+- 新字节没有独立 verification；
+- 规则升级缺少对应 scope 的回归角色；
+- 同一原因连续三轮未修复；
+- 通过 best-of-N、隐藏失败结果、挑选有利帧或移动失败层来伪造改善。
